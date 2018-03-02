@@ -1,0 +1,551 @@
+<script>
+[[?[[S8]]::splash::
+//Link Scroll Animate to Anchor
+function scrollToAnchor(aid){
+    var aTag = $("a[name='"+ aid +"']");
+    $('html,body').animate({scrollTop: aTag.offset().top - 175},'slow');
+}
+$("#lrn").click(function() {
+   scrollToAnchor('learn');
+});
+$("#reg").click(function() {
+   scrollToAnchor('register');
+});
+$("#exp").click(function() {
+   scrollToAnchor('experience');
+});
+
+
+
+//Get Event Location for Splash
+$(document).ready(function() {
+  // When user hits 'enter', do a click instead
+  $("#eventSearchComponent form").submit(function() {
+    $('#zipSubmit').click();
+    return false;
+  });
+
+  // When user clicks submit button, show results from zip search rather than geo location
+  $('#zipSubmit').click(function() {
+    var theInputZip = $('#inputZip').val();
+    var inputType = "Zip";
+    getNearbyCities(inputType,theInputZip);
+  });
+
+
+  function getNearbyCities(inputType,theLocation){
+    console.log("entered getNearbyCities ",inputType,theLocation);
+    if (inputType == "Zip"){
+      $.ajax({
+        type: 'GET',
+        url: 'https://secure3.convio.net/ala/site/CRTeamraiserAPI',
+        data: {
+          method: 'getTeamraisersByDistance',
+          api_key: 's21*J6',
+          v: '1.0',
+          starting_postal: theLocation,
+          distance_units: 'mi',
+          search_distance: '200',
+          event_type: 'Run/Walk',
+          list_sort_column: 'event_date',
+          list_ascending: 'true',
+          response_format: 'xml'
+        },
+        dataType: 'xml'
+      }).done(function(data){
+        processReturnedData(data,inputType,theLocation);
+      });
+    }
+  }
+
+  function processReturnedData(data,inputType,theLocation){
+    // Process array data, convert dates, build strings of upcoming and past events
+    var frIdArray = new Array();
+    var regUrlArray = new Array();
+    var nameArray = new Array();
+    var urlArray = new Array();
+    var cityArray = new Array();
+    var stateArray = new Array();
+    var dateArray = new Array();
+    var regTeamArray = new Array();
+    var regIndArray = new Array();
+    var locationArray = new Array();
+    var offsetFromNow = new Array();
+    var tomorrowDate = Date.now() + 86400000; // (86400000 ms in a day) added to avoid same day event confusion.
+    var excludeDate = -15552000000;  // 86400000 ms/day * 180 days
+    console.log("tomorrowDate = ",tomorrowDate);
+    console.log("excludeDate = ",excludeDate);
+    var nearHeaderString = "Upcoming Events ";
+    if(inputType == "Zip"){
+      var changeHeading = nearHeaderString+'Near '+theLocation;
+      $('h2.upcoming').text(changeHeading);
+    }
+    var futureEventString = "<div id='futureEvents'>";
+    var eventStringLine = "";
+    var eventCounter = 0;
+
+    var j = 0;
+    var k = 0;
+
+    if ($('teamraiser',data).length > 0 ){
+      $('teamraiser',data).each(function(i){
+            // Added by Charity Dynamics to return CMS page instead of TR greeting page
+            var cmsState = $(this).find("state").text().toLowerCase();
+            cmsState = cmsState.replace(" ","-");
+        	var cmsCity = $(this).find("city").text().toLowerCase();
+            cmsCity = cmsCity.replace(" ","-");
+        	var cmsGreetingUrl = "http://www.lung.org/pledge-events/"+cmsState+"/"+cmsCity+"-climb-fy14/";
+            console.log(cmsGreetingUrl);
+            // End of code added by Charity Dynamics
+
+
+        if($(this).find("accepting_registrations").text() == "true" || $(this).find("accepting_donations").text() == "true"){
+        	frIdArray[j] = $(this).find("id").text();
+        	regUrlArray[j] = "http://action.lung.org/site/TR?pg=informational&sid=7901&fr_id="+frIdArray;
+	        urlArray[j] = $(this).find("greeting_url").text();
+	        nameArray[j] = $(this).find("name").text();
+	        cityArray[j] = $(this).find("city").text();
+	        stateArray[j] = $(this).find("state").text();
+	        dateArray[j] = $(this).find("event_date").text();
+	        regTeamArray[j] = $(this).find("reg_new_team_url").text();
+	        regIndArray[j] = $(this).find("reg_indiv_url").text();
+	        locationArray[j] = $(this).find("location_name").text();
+	        console.log("dateArray["+j+"] = ",dateArray[j]);
+	        j = j+1;
+        }
+      });
+    }else{
+      alert("We're sorry, we can't find an event nearby.  Please try a different 5 digit zip code.");
+      j = 0;
+    }
+
+    console.log("j = ",j);
+    // if j>0 we have a result, process.  If j=0 we have no result, so skip computations and proceed with closing up the divs.
+    if (j >= 0){
+      for(k = 0;k <  j; k++){
+        // Split out dates manually because IE7/8 doesn't handle UTC well
+        var dateStr=dateArray[k];
+        var a=dateStr.split("T");
+        var d=a[0].split("-");
+        var t=a[1].split(":");
+        t[2] = t[2].slice(0,2); // Chopping off trailing numbers
+        var fullDate = new Date(d[0],(d[1]-1),d[2],t[0],t[1],t[2]);
+
+        console.log("k.dateArray[%d] = ",k,dateArray[k]);
+        offsetFromNow[k] = fullDate.valueOf() - tomorrowDate.valueOf();
+        console.log("k.offsetFromNow[%d] = ",k,offsetFromNow[k]);
+        dateArray[k] = (fullDate.getMonth()+1)+"."+fullDate.getDate()+"."+(fullDate.getFullYear()-2000);
+        console.log("k.dateArray[%d] = ",k,dateArray[k]);
+        if (offsetFromNow[k] < excludeDate){
+          continue;
+        }
+
+        if (offsetFromNow[k] > 0){
+          eventStringLine = "";
+          eventStringLine += "<div class='eventEntry'><div class='left'><a href='"+urlArray[k]+"'><span class='eventCity'>"+cityArray[k]+", "+stateArray[k]+"<span class='divider'>&nbsp;|&nbsp;</span></span>";
+          eventStringLine += "<span class='eventDate'>"+dateArray[k]+"<span class='divider'>&nbsp;|&nbsp;</span></span>";
+          eventStringLine += "<span class='eventLocation'>"+locationArray[k]+"</span></a></div>";
+          eventStringLine += "<div class='right'><a class='eventDetails cta button blue' href='"+urlArray[k]+"'>Details</a>";
+          eventStringLine += "<a class='eventReg cta button red' href='"+regTeamArray[k]+"'>Register</a></div></div>";
+
+
+          futureEventString += eventStringLine;
+        }
+        else {
+          eventStringLine = "";
+          eventStringLine += "<div class='eventEntry'><a href='"+urlArray[k]+"' class='eventName'>"+nameArray[k]+"</a><br />";
+          eventStringLine += "<span class='eventLocation'>"+cityArray[k]+", "+stateArray[k]+"</span>";
+          eventStringLine += "<span class='eventDate'>"+dateArray[k]+"</span></div>";
+
+          pastEventString += eventStringLine;
+
+        }
+
+        futureEventString += "</div>";
+        $('#futureEventListContainer').html(futureEventString);
+      }
+    }
+  }
+
+  function getLocation(){
+    console.log("Entered getLocation");
+    var options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 'infinity'
+    };
+    if (navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(showPosition,showError,options);
+    }
+    else{console.log("Geolocation is not supported by this browser.");}
+  }
+
+  function showPosition(position){
+    console.log("Entered showPosition lat: ",position.coords.latitude);
+    console.log("Entered showPosition long: ",position.coords.longitude);
+    var theURL = 'http://api.geonames.org/findNearbyPostalCodes?lat='+position.coords.latitude+'&lng='+position.coords.longitude+'&username=lung&maxRows=1';
+    if (jQuery.support.ajax && window.XDomainRequest) {
+      // Use Microsoft XDR
+      var xdr = new XDomainRequest();
+      xdr.open("get", theURL);
+      xdr.onload = function() {
+        // XDomainRequest doesn't provide responseXml, so if you need it:
+        var dom = new ActiveXObject("Microsoft.XMLDOM");
+        dom.async = false;
+        dom.loadXML(xdr.responseText);
+        processZipResponse(xdr.responseText);
+      };
+      xdr.send();
+    } else {
+
+      var xmlHttpZip = new XMLHttpRequest();
+      xmlHttpZip.onreadystatechange=function(){
+        if (xmlHttpZip.readyState==4 && xmlHttpZip.status==200) {
+          processZipResponse(xmlHttpZip.responseXML);
+        }
+      }
+      xmlHttpZip.open("GET",theURL,true);
+      xmlHttpZip.send();
+    }
+  }
+
+  function processZipResponse(dataIn){
+    $(dataIn).each(function(){
+      theInputZip = $(this).find('postalcode').text();
+    });
+    console.log("the input zip ",theInputZip);
+    getNearbyCities("Zip",theInputZip);
+  }
+
+  function showError(error){
+    switch(error.code){
+      case error.PERMISSION_DENIED:
+        console.log("User denied the request for Geolocation.");
+        break;
+      case error.POSITION_UNAVAILABLE:
+        alert("Location information is currently unavailable.");
+        break;
+      case error.TIMEOUT:
+        alert("The request to get location timed out.  Please refresh the page to use this feature.");
+        break;
+      case error.UNKNOWN_ERROR:
+        alert("An unknown error occurred.");
+        break;
+    }
+  }
+
+  // Go ahead and try the location search prior to user-submitted search criteria
+  getLocation();
+});
+$(window).unload(function() {
+  $('select option').remove();
+  $('#inputZip').val('');
+});
+::
+
+
+]]
+
+
+[[?[[?x9x::x[[S4]]x::TRUE::FALSE]][[?[[S8]]::donation=completed::FALSE::TRUE]]::TRUETRUE::
+
+//NO SCRIPTS ON DONATION FLOW(EXCEPT TY PAGE), PROBLEMS WITH YUI/jQUERY CLASH
+::
+//--------------------------------------
+//TOP NAV DROPDOWN
+//--------------------------------------
+
+$('.desk .log').click(function(){
+  $(this).toggleClass('active');
+  $('.utility .donate').hide();
+
+  if ($(this).hasClass('active') ) {
+    $('.utility.desk .login').slideToggle('slow');
+    $('.header').addClass('extend');
+    $('.hero').addClass('padTop');
+
+
+    //if login open and click donate
+    if ($('.desk .don').hasClass('active') ) {
+      $('.desk .don').removeClass('active');
+      $('.utility.desk').show();
+    }
+    //login is closed, opening donate
+    else{
+      $('.utility.desk').slideToggle('slow');
+      $('.desk .don').removeClass('active');
+    }
+  }
+  else {
+    $('.utility .login').hide();
+    $('.utility.desk').slideToggle('slow');
+
+    $('.header').removeClass('extend');
+    $('.hero').removeClass('padTop');
+
+  }
+});
+$('.mobileShow .log').click(function(){
+  $(this).toggleClass('active');
+  $('.utility .donate').hide();
+
+  if ($(this).hasClass('active') ) {
+    $('.utility.mobileShow .login').slideToggle('slow');
+
+      $('.header').addClass('extend');
+      $('.hero').addClass('padTop');
+
+
+    //if login open and click donate
+    if ($('.mobileShow .don').hasClass('active') ) {
+      $('.mobileShow .don').removeClass('active');
+      $('.utility.mobileShow').show();
+    }
+    //login is closed, opening donate
+    else{
+      $('.utility.mobileShow').slideToggle('slow');
+      $('.mobileShow .don').removeClass('active');
+    }
+  }
+  else {
+    $('.utility .login').hide();
+    $('.utility.mobileShow').slideToggle('slow');
+
+      $('.header').removeClass('extend');
+      $('.hero').removeClass('padTop');
+
+  }
+});
+
+
+
+
+$(document).ready(function() {
+//-------------------------
+//THERM SCRIPTS
+//-------------------------
+  [[?x[[S334:pg]]x::xentryx::
+    var eventTherm = [[E130:[[E130:[[E42:[[S80:evID]]:dollars]] [[E42:[[S80:evID]]:goal]] /]] 100 *]];
+    var roundTherm = parseInt(eventTherm);
+    console.log(roundTherm);
+    var eventPercent = 100 - roundTherm;
+    console.log(eventPercent);
+    if(eventPercent <= 0){
+      $('.thermometer-inner').css({'width': '0'});
+      var eventPercentStr = '100%';
+
+    }
+    else{
+      $('.thermometer-inner').css({'width': roundTherm+'%'});
+      var eventPercentStr = roundTherm+'%';
+    }
+    $('.right.percent').append(eventPercentStr);
+
+  ::
+  ]]
+
+
+  //-------------------------
+  //LIST SCRIPTS
+  //------------------------
+
+  [[?x[[S334:pg]]x::xentryx::
+  $('.left .vScrollList ol li').each(function(){
+    var store = $(this).html();
+    var amt = store.split('&nbsp;');
+    var amount = '<span class="right">'+amt[2]+'</span>';
+    var link = $('.vScrollList ol li a').html();
+    var name = '<span class="left">'+amt[0]+'</span>';
+    var listItem = '<li class="listEntry">'+name + amount+'</li>';
+    $(listItem).appendTo('.left .topList');
+
+  });
+  $('.right .vScrollList ol li').each(function(){
+    var store = $(this).html();
+    var amt = store.split('&nbsp;');
+    var amount = '<span class="right">'+amt[2]+'</span>';
+    var link = $('.vScrollList ol li a').html();
+    var name = '<span class="left">'+amt[0]+'</span>';
+    var listItem = '<li class="listEntry">'+name + amount+'</li>';
+    $(listItem).appendTo('.right .topList');
+  });
+  ::
+  ]]
+
+  //------------------------------
+  //NAV TOGGLE
+  //-------------------------------
+  $('a.menuLink').click(function(){
+    $('#menu').slideToggle();
+    $(this).toggleClass('active');
+    if(!$(this).hasClass('active')) {
+      $('.utility').hide();
+      $('.menuItem .button').removeClass('active');
+    }
+  });
+
+  [[?[[S8]]::splash::
+  ::
+  $('.menuItem a').click(function(){
+    $(this).parent().children('.dropdown').slideToggle();
+  });
+  $('.dropdown').hover(function(){
+    $(this).parent().toggleClass('active');
+  });
+
+  ]]
+
+  //login pages, moving things around so is more responsive friendly
+  [[?x10x::x[[S4]]x::
+    $('#appAreaNoWidthClearFix .outer-border > table .right-block').insertBefore('#lmainLogonForm');
+
+  ::]]
+
+  [[?x7901x::x[[S334:sid]]x::
+    $('.regType').hover(function() {
+       $(this).toggleClass('ltGrey');
+    });
+  ::
+  ]]
+
+});
+]]
+
+</script>
+
+[[?xx[[S80:evID]]xx::xx15763xx::
+<!-- Thermometer Code -->
+<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
+
+<script type="text/javascript">
+jQuery.noConflict();
+jQuery(document).ready(function($){
+$('.thermometer dl dt:contains("Goal:")').text("Our Goal");
+$('.thermometer dl dt:contains("Achieved:")').text("Together, We've Raised");
+
+$('.image img').attr('src',function(index,attr){
+      return attr.replace('images','images/bike');
+});
+
+	$('.image img').each(function(){
+		$(this).removeAttr('width')
+		$(this).removeAttr('height');
+	});
+
+});
+
+[[?[[S8]]::entry::
+jQuery.noConflict();
+jQuery(document).ready(function($){
+$('img.badge-icon-small').attr('src',function(index,attr){
+      return attr.replace('friendraiser','vanilla');
+});
+});
+::
+[[?[[S8]]::team::
+jQuery.noConflict();
+jQuery(document).ready(function($){
+$('img.team-roster-star').attr('src',function(index,attr){
+      return attr.replace('friendraiser','vanilla');
+});
+});
+::
+]]
+]]
+</script>
+::
+[[?xx[[S80:evID]]xx::xx14760xx::
+<!-- Thermometer Code -->
+<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
+
+<script type="text/javascript">
+jQuery.noConflict();
+jQuery(document).ready(function($){
+$('.thermometer dl dt:contains("Goal:")').text("Our Goal");
+$('.thermometer dl dt:contains("Achieved:")').text("Together, We've Raised");
+
+$('.image img').attr('src',function(index,attr){
+      return attr.replace('images','images/bike');
+});
+
+	$('.image img').each(function(){
+		$(this).removeAttr('width')
+		$(this).removeAttr('height');
+	});
+
+});
+
+[[?[[S8]]::entry::
+jQuery.noConflict();
+jQuery(document).ready(function($){
+$('img.badge-icon-small').attr('src',function(index,attr){
+      return attr.replace('friendraiser','vanilla');
+});
+});
+::
+[[?[[S8]]::team::
+jQuery.noConflict();
+jQuery(document).ready(function($){
+$('img.team-roster-star').attr('src',function(index,attr){
+      return attr.replace('friendraiser','vanilla');
+});
+});
+::
+]]
+]]
+</script>
+::
+]]
+]]
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) return;
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/sdk.js#xfbml=1&version=v2.3&appId=1397341103897228";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+<script>
+$("a.menuLink").click(function(e) {
+
+        if( $("a.menuLink i.fa").hasClass("fa-bars") ) {
+            $("a.menuLink i.fa").removeClass("fa-bars").addClass("fa-times");
+
+        } else {
+            // if other menus are open remove open class and add closed
+            $("a.menuLink i.fa").removeClass("fa-times").addClass("fa-bars");
+        }
+
+});
+
+
+$(window).load(function(){
+$(document).ready(function(){
+
+$('#user_type_new_participant_registration_container').appendTo('#f2fLoginOauth');
+
+$('#user_type_login_container').insertAfter('#f2fLoginOauth');
+
+var $link = $('#user_type_oauth_login_container .loginText a.loginHref');
+var $div = $link.find('div');
+$link.html('Register using your favorite social network:');
+$link.append($div);
+
+var target = document.querySelectorAll('#user_type_oauth_login_container > .loginText > .loginHref > .loginLinks');
+Array.prototype.forEach.call(target, function(element){
+    element.removeAttribute('style');
+});
+
+$('div#user_type_login_container > form#f2fLoginForm > div#user_type_login_login_container > div.form-content > #user_type_user_name_input_container > #USERNAME_1').attr('placeholder', 'Username');
+
+$('div#user_type_login_container > form#f2fLoginForm > div#user_type_login_login_container > div.form-content > #user_type_password_input_container > #Password').attr('placeholder', 'Password');
+
+});
+});
+</script>
